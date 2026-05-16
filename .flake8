@@ -1,0 +1,14 @@
+[flake8]
+max-line-length = 99
+extend-ignore = E203, W503, E501
+exclude =
+    .git,
+    __pycache__,
+    .mypy_cache,
+    .pytest_cache,
+    build,
+    dist,
+    *.egg-info,
+    notebooks/
+per-file-ignores =
+    tests/*: S101

@@ -1,0 +1,157 @@
+project:
+  name: energy-forecasting
+  version: "1.0.0"
+  random_seed: 42
+  mlflow_experiment: "energy_forecasting"
+  mlflow_tracking_uri: "mlruns"
+
+data:
+  url: "https://archive.ics.uci.edu/ml/machine-learning-databases/00235/household_power_consumption.zip"
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  filename: "household_power_consumption.txt"
+  target_col: "Global_active_power"
+  date_col: "datetime"
+  separator: ";"
+  na_values: ["?"]
+  resample_freq: "1h"
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+
+forecasting:
+  horizon: 24
+  freq: "1h"
+
+features:
+  lags: [1, 6, 12, 24, 48, 168]
+  rolling_windows: [6, 12, 24, 48, 168]
+  rolling_stats: ["mean", "std", "min", "max"]
+  fourier_periods: [24, 168]
+  fourier_terms: 3
+  calendar_features:
+    - hour
+    - dayofweek
+    - month
+    - quarter
+    - dayofyear
+    - weekofyear
+    - is_weekend
+    - is_holiday
+
+arima:
+  p: 2
+  d: 1
+  q: 2
+  seasonal_p: 1
+  seasonal_d: 1
+  seasonal_q: 1
+  seasonal_period: 24
+
+prophet:
+  changepoint_prior_scale: 0.05
+  seasonality_prior_scale: 10.0
+  holidays_prior_scale: 10.0
+  seasonality_mode: "multiplicative"
+  yearly_seasonality: true
+  weekly_seasonality: true
+  daily_seasonality: true
+  n_forecast_periods: 24
+
+xgboost:
+  n_estimators: 500
+  max_depth: 6
+  learning_rate: 0.05
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_weight: 3
+  reg_alpha: 0.1
+  reg_lambda: 1.0
+  objective: "reg:squarederror"
+  eval_metric: "rmse"
+  early_stopping_rounds: 50
+  verbosity: 0
+
+lightgbm:
+  n_estimators: 500
+  max_depth: 6
+  learning_rate: 0.05
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_samples: 20
+  reg_alpha: 0.1
+  reg_lambda: 1.0
+  num_leaves: 63
+  objective: "regression"
+  metric: "rmse"
+  early_stopping_rounds: 50
+  verbose: -1
+
+catboost:
+  iterations: 500
+  depth: 6
+  learning_rate: 0.05
+  l2_leaf_reg: 3.0
+  bagging_temperature: 1.0
+  random_strength: 1.0
+  objective: "RMSE"
+  eval_metric: "RMSE"
+  early_stopping_rounds: 50
+  verbose: 0
+
+lstm:
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.2
+  sequence_length: 168
+  batch_size: 64
+  num_epochs: 50
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  patience: 10
+  clip_grad_norm: 1.0
+  bidirectional: false
+
+ensemble:
+  method: "weighted"
+  weights:
+    arima: 0.05
+    prophet: 0.10
+    xgboost: 0.15
+    lightgbm: 0.25
+    catboost: 0.20
+    lstm: 0.25
+
+optuna:
+  n_trials: 50
+  timeout: 3600
+  direction: "minimize"
+  metric: "rmse"
+  study_name: "lightgbm_optimization"
+  params_output: "models/best_params.json"
+
+evaluation:
+  metrics: ["rmse", "mae", "mape"]
+  walk_forward:
+    n_splits: 5
+    gap: 0
+    test_size: 168
+
+paths:
+  models_dir: "models"
+  reports_dir: "reports"
+  figures_dir: "reports/figures"
+  logs_dir: "logs"
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s — %(name)s — %(levelname)s — %(message)s"
+  log_file: "logs/training.log"
+
+visualization:
+  figure_dpi: 150
+  figure_format: "png"
+  style: "seaborn-v0_8-whitegrid"
+  palette: "husl"
+  figsize_default: [14, 6]
+  figsize_large: [18, 10]
