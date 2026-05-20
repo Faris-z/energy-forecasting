@@ -4,17 +4,16 @@ All plots are saved automatically to ``reports/figures/`` in PNG format.
 No plots are shown interactively (``plt.show()`` is never called) so
 the module works in headless/container environments.
 """
-
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import matplotlib
-
 matplotlib.use("Agg")  # headless backend — must precede pyplot import
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
+
 
 logger = logging.getLogger(__name__)
 
@@ -387,8 +386,6 @@ def plot_metrics_comparison(
     metrics = ["rmse", "mae", "mape"]
     model_names = list(results.keys())
     x = np.arange(len(model_names))
-    width = 0.25
-
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
 
     for i, metric in enumerate(metrics):
