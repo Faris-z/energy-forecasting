@@ -65,9 +65,7 @@ class WeightedEnsemble:
         arrays: List[np.ndarray] = []
         for name, weight in zip(self.model_names, self.weights):
             if name not in predictions:
-                logger.warning(
-                    "Model '%s' missing from predictions — using zeros.", name
-                )
+                logger.warning("Model '%s' missing from predictions — using zeros.", name)
                 n = next(iter(predictions.values())).shape[0]
                 arrays.append(np.zeros(n) * weight)
             else:
@@ -75,9 +73,7 @@ class WeightedEnsemble:
 
         lengths = {len(a) for a in arrays}
         if len(lengths) > 1:
-            raise ValueError(
-                f"Prediction arrays have inconsistent lengths: {lengths}"
-            )
+            raise ValueError(f"Prediction arrays have inconsistent lengths: {lengths}")
 
         blended = np.sum(arrays, axis=0)
         logger.info(

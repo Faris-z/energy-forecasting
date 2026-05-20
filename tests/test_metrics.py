@@ -131,31 +131,23 @@ class TestWalkForwardSplit:
             }
         }
 
-    def test_correct_number_of_folds(
-        self, big_df: pd.DataFrame, wf_config: dict
-    ) -> None:
+    def test_correct_number_of_folds(self, big_df: pd.DataFrame, wf_config: dict) -> None:
         """Generator must yield exactly n_splits folds."""
         folds = list(walk_forward_split(big_df, wf_config))
         assert len(folds) == wf_config["evaluation"]["walk_forward"]["n_splits"]
 
-    def test_no_temporal_leakage(
-        self, big_df: pd.DataFrame, wf_config: dict
-    ) -> None:
+    def test_no_temporal_leakage(self, big_df: pd.DataFrame, wf_config: dict) -> None:
         """Train end must always be before test start in every fold."""
         for train_fold, test_fold in walk_forward_split(big_df, wf_config):
             assert train_fold.index.max() < test_fold.index.min()
 
-    def test_test_size_respected(
-        self, big_df: pd.DataFrame, wf_config: dict
-    ) -> None:
+    def test_test_size_respected(self, big_df: pd.DataFrame, wf_config: dict) -> None:
         """Each test fold must have exactly test_size rows."""
         expected = wf_config["evaluation"]["walk_forward"]["test_size"]
         for _, test_fold in walk_forward_split(big_df, wf_config):
             assert len(test_fold) == expected
 
-    def test_train_grows_across_folds(
-        self, big_df: pd.DataFrame, wf_config: dict
-    ) -> None:
+    def test_train_grows_across_folds(self, big_df: pd.DataFrame, wf_config: dict) -> None:
         """Expanding-window: each train fold should be larger than the last."""
         sizes = [len(tr) for tr, _ in walk_forward_split(big_df, wf_config)]
         assert sizes == sorted(sizes)

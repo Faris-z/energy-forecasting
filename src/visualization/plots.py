@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import matplotlib
+
 matplotlib.use("Agg")  # headless backend — must precede pyplot import
 import matplotlib.pyplot as plt
 import numpy as np
@@ -133,11 +134,11 @@ def plot_residuals(
     Path
         Path to the saved figure.
     """
-    residuals = y_true - y_pred[:len(y_true)]
+    residuals = y_true - y_pred[: len(y_true)]
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-    axes[0].plot(index[:len(residuals)], residuals, color="#e74c3c", linewidth=0.8)
+    axes[0].plot(index[: len(residuals)], residuals, color="#e74c3c", linewidth=0.8)
     axes[0].axhline(0, color="black", linestyle="--", linewidth=1)
     axes[0].set_title(f"{model_name} — Residuals over Time")
     axes[0].set_xlabel("Datetime")

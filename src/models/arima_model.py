@@ -6,7 +6,7 @@ so it can be used interchangeably with the other models in the pipeline.
 
 import logging
 import warnings
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -74,12 +74,18 @@ class ARIMAForecaster:
         try:
             from statsmodels.tsa.statespace.sarimax import SARIMAX
         except ImportError as exc:
-            raise ImportError("statsmodels is required for ARIMA: pip install statsmodels") from exc
+            raise ImportError(
+                "statsmodels is required for ARIMA: pip install statsmodels"
+            ) from exc
 
         logger.info(
             "Fitting SARIMA(%d,%d,%d)×(%d,%d,%d)[%d] on %d observations ...",
-            self.p, self.d, self.q,
-            self.seasonal_p, self.seasonal_d, self.seasonal_q,
+            self.p,
+            self.d,
+            self.q,
+            self.seasonal_p,
+            self.seasonal_d,
+            self.seasonal_q,
             self.seasonal_period,
             len(series),
         )
@@ -92,8 +98,10 @@ class ARIMAForecaster:
                 series,
                 order=(self.p, self.d, self.q),
                 seasonal_order=(
-                    self.seasonal_p, self.seasonal_d,
-                    self.seasonal_q, self.seasonal_period
+                    self.seasonal_p,
+                    self.seasonal_d,
+                    self.seasonal_q,
+                    self.seasonal_period,
                 ),
                 enforce_stationarity=False,
                 enforce_invertibility=False,

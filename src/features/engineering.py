@@ -284,9 +284,7 @@ def build_features(
     logger.info("Starting feature engineering ...")
 
     df = add_lag_features(df, target, feat_cfg["lags"])
-    df = add_rolling_features(
-        df, target, feat_cfg["rolling_windows"], feat_cfg["rolling_stats"]
-    )
+    df = add_rolling_features(df, target, feat_cfg["rolling_windows"], feat_cfg["rolling_stats"])
     df = add_calendar_features(df, feat_cfg.get("calendar_features"))
     df = add_fourier_features(
         df,

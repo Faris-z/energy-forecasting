@@ -9,7 +9,6 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Tuple
 
-import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -39,9 +38,7 @@ def load_raw_data(raw_path: Path, config: Dict[str, Any]) -> pd.DataFrame:
         low_memory=False,
     )
 
-    df["datetime"] = pd.to_datetime(
-        df["Date"] + " " + df["Time"], format="%d/%m/%Y %H:%M:%S"
-    )
+    df["datetime"] = pd.to_datetime(df["Date"] + " " + df["Time"], format="%d/%m/%Y %H:%M:%S")
     df = df.drop(columns=["Date", "Time"])
     df = df.set_index("datetime")
     df = df.sort_index()
@@ -127,9 +124,7 @@ def resample_to_hourly(df: pd.DataFrame, config: Dict[str, Any]) -> pd.DataFrame
     df_hourly = df_hourly.ffill(limit=24)
     df_hourly = df_hourly.dropna()
 
-    logger.info(
-        "Resampled shape: %d rows × %d columns", df_hourly.shape[0], df_hourly.shape[1]
-    )
+    logger.info("Resampled shape: %d rows × %d columns", df_hourly.shape[0], df_hourly.shape[1])
     return df_hourly
 
 
@@ -235,9 +230,7 @@ def load_processed_data(
     for split in ["train", "val", "test"]:
         p = processed_dir / f"{split}.parquet"
         if not p.exists():
-            raise FileNotFoundError(
-                f"Processed file not found: {p}. Run `make data` first."
-            )
+            raise FileNotFoundError(f"Processed file not found: {p}. Run `make data` first.")
 
     train = pd.read_parquet(processed_dir / "train.parquet")
     val = pd.read_parquet(processed_dir / "val.parquet")

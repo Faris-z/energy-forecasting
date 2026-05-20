@@ -5,7 +5,7 @@ Provides RMSE, MAE, and MAPE implementations, plus a walk-forward
 """
 
 import logging
-from typing import Dict, Any, Generator, List, Optional, Tuple
+from typing import Dict, Any, Generator, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -209,18 +209,14 @@ def cross_validate_model(
     """
     fold_metrics: List[Dict[str, float]] = []
 
-    for fold_idx, (train_fold, test_fold) in enumerate(
-        walk_forward_split(df, config)
-    ):
+    for fold_idx, (train_fold, test_fold) in enumerate(walk_forward_split(df, config)):
         X_train = train_fold[feature_cols].values
         y_train = train_fold[target_col].values
 
         model = model_class(**model_params)
         model.fit(X_train, y_train)
 
-        metrics = evaluate_model(
-            model.predict, train_fold, test_fold, target_col, feature_cols
-        )
+        metrics = evaluate_model(model.predict, train_fold, test_fold, target_col, feature_cols)
         fold_metrics.append(metrics)
         logger.info(
             "Fold %d — RMSE: %.4f  MAE: %.4f  MAPE: %.2f%%",
@@ -231,8 +227,7 @@ def cross_validate_model(
         )
 
     mean_metrics = {
-        k: float(np.mean([m[k] for m in fold_metrics]))
-        for k in ["rmse", "mae", "mape"]
+        k: float(np.mean([m[k] for m in fold_metrics])) for k in ["rmse", "mae", "mape"]
     }
     logger.info(
         "CV Mean — RMSE: %.4f  MAE: %.4f  MAPE: %.2f%%",

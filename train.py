@@ -29,7 +29,7 @@ from src.models.lstm_model import LSTMForecaster
 from src.models.prophet_model import ProphetForecaster
 from src.models.tree_models import CatBoostForecaster, LightGBMForecaster, XGBoostForecaster
 from src.models.tuning import run_optuna_tuning
-from src.utils import ensure_dirs, load_config, load_json, save_json, set_seed, setup_logging
+from src.utils import ensure_dirs, load_config, save_json, set_seed, setup_logging
 from src.visualization.plots import (
     plot_correlation_heatmap,
     plot_feature_importance,
@@ -42,8 +42,9 @@ from src.visualization.plots import (
 
 logger = logging.getLogger(__name__)
 
-print(torch.cuda.is_available())    # should print True
+print(torch.cuda.is_available())  # should print True
 print(torch.cuda.get_device_name(0))
+
 
 class _NullContext:
     """No-op context manager used when MLflow is unavailable."""
@@ -193,7 +194,7 @@ def train_lstm(
     model = LSTMForecaster.from_config(config)
     model.fit(X_train, y_train, X_val, y_val)
     preds = model.predict(X_test)
-    preds = preds[:len(X_test)]
+    preds = preds[: len(X_test)]
     preds = np.clip(preds, 0, None)
     model.save(str(Path(config["paths"]["models_dir"]) / "lstm"))
     logger.info("LSTM predictions done.")
@@ -261,13 +262,15 @@ def run_training(config: Dict[str, Any]) -> None:
 
     with run_context:
         if mlflow_enabled:
-            mlflow.log_params({
-                "n_features": len(feature_cols),
-                "train_size": len(train_feat),
-                "val_size": len(val_feat),
-                "test_size": len(test_feat),
-                "horizon": config["forecasting"]["horizon"],
-            })
+            mlflow.log_params(
+                {
+                    "n_features": len(feature_cols),
+                    "train_size": len(train_feat),
+                    "val_size": len(val_feat),
+                    "test_size": len(test_feat),
+                    "horizon": config["forecasting"]["horizon"],
+                }
+            )
 
         # ── ARIMA ─────────────────────────────────────────────────────────────
         logger.info("=" * 60)
@@ -275,14 +278,20 @@ def run_training(config: Dict[str, Any]) -> None:
         t0 = time.time()
         try:
             arima_preds = train_arima(train_raw, test_raw, config)
-            arima_preds = arima_preds[:len(y_test)]
+            arima_preds = arima_preds[: len(y_test)]
             all_predictions["arima"] = arima_preds
-            arima_metrics = compute_all_metrics(y_test[:len(arima_preds)], arima_preds)
+            arima_metrics = compute_all_metrics(y_test[: len(arima_preds)], arima_preds)
             all_results["arima"] = arima_metrics
             logger.info("ARIMA — %s  (%.1fs)", arima_metrics, time.time() - t0)
             if mlflow_enabled:
                 mlflow.log_metrics({f"arima_{k}": v for k, v in arima_metrics.items()})
-            plot_residuals(y_test[:len(arima_preds)], arima_preds, "ARIMA", test_feat.index[:len(arima_preds)], config)
+            plot_residuals(
+                y_test[: len(arima_preds)],
+                arima_preds,
+                "ARIMA",
+                test_feat.index[: len(arima_preds)],
+                config,
+            )
         except Exception as exc:
             logger.error("ARIMA failed: %s — using naive forecast.", exc)
             all_predictions["arima"] = np.full(len(y_test), y_train[-1])
@@ -294,14 +303,20 @@ def run_training(config: Dict[str, Any]) -> None:
         t0 = time.time()
         try:
             prophet_preds = train_prophet(train_raw, test_raw, config)
-            prophet_preds = prophet_preds[:len(y_test)]
+            prophet_preds = prophet_preds[: len(y_test)]
             all_predictions["prophet"] = prophet_preds
-            prophet_metrics = compute_all_metrics(y_test[:len(prophet_preds)], prophet_preds)
+            prophet_metrics = compute_all_metrics(y_test[: len(prophet_preds)], prophet_preds)
             all_results["prophet"] = prophet_metrics
             logger.info("Prophet — %s  (%.1fs)", prophet_metrics, time.time() - t0)
             if mlflow_enabled:
                 mlflow.log_metrics({f"prophet_{k}": v for k, v in prophet_metrics.items()})
-            plot_residuals(y_test[:len(prophet_preds)], prophet_preds, "Prophet", test_feat.index[:len(prophet_preds)], config)
+            plot_residuals(
+                y_test[: len(prophet_preds)],
+                prophet_preds,
+                "Prophet",
+                test_feat.index[: len(prophet_preds)],
+                config,
+            )
         except Exception as exc:
             logger.error("Prophet failed: %s — using naive forecast.", exc)
             all_predictions["prophet"] = np.full(len(y_test), y_train[-1])
@@ -321,7 +336,9 @@ def run_training(config: Dict[str, Any]) -> None:
         if mlflow_enabled:
             mlflow.log_metrics({f"xgboost_{k}": v for k, v in xgb_metrics.items()})
         plot_residuals(y_test, xgb_preds, "XGBoost", test_feat.index, config)
-        plot_feature_importance(feature_cols, xgb_model.get_feature_importance(), "XGBoost", config)
+        plot_feature_importance(
+            feature_cols, xgb_model.get_feature_importance(), "XGBoost", config
+        )
         plot_shap_summary(xgb_model._model, X_test, feature_cols, "XGBoost", config)
 
         # ── LightGBM ──────────────────────────────────────────────────────────
@@ -338,14 +355,14 @@ def run_training(config: Dict[str, Any]) -> None:
         if mlflow_enabled:
             mlflow.log_metrics({f"lightgbm_{k}": v for k, v in lgb_metrics.items()})
         plot_residuals(y_test, lgb_preds, "LightGBM", test_feat.index, config)
-        plot_feature_importance(feature_cols, lgb_model.get_feature_importance(), "LightGBM", config)
+        plot_feature_importance(
+            feature_cols, lgb_model.get_feature_importance(), "LightGBM", config
+        )
 
         # ── Optuna tuning for LightGBM ────────────────────────────────────────
         logger.info("=" * 60)
         logger.info("Running Optuna hyperparameter tuning for LightGBM ...")
-        full_feat = build_features(
-            pd.concat([train_raw, val_raw]), config, drop_na=True
-        )
+        full_feat = build_features(pd.concat([train_raw, val_raw]), config, drop_na=True)
         try:
             best_lgb_params = run_optuna_tuning(full_feat, config)
             if mlflow_enabled:
@@ -357,7 +374,14 @@ def run_training(config: Dict[str, Any]) -> None:
         logger.info("Retraining LightGBM with Optuna best params ...")
         tuned_config = {**config, "lightgbm": best_lgb_params}
         lgb_model, lgb_preds = train_tree_model(
-            LightGBMForecaster, X_train, y_train, X_val, y_val, X_test, tuned_config, "LightGBM-tuned"
+            LightGBMForecaster,
+            X_train,
+            y_train,
+            X_val,
+            y_val,
+            X_test,
+            tuned_config,
+            "LightGBM-tuned",
         )
         all_predictions["lightgbm"] = lgb_preds
         lgb_metrics = compute_all_metrics(y_test, lgb_preds)
@@ -380,7 +404,9 @@ def run_training(config: Dict[str, Any]) -> None:
         if mlflow_enabled:
             mlflow.log_metrics({f"catboost_{k}": v for k, v in cat_metrics.items()})
         plot_residuals(y_test, cat_preds, "CatBoost", test_feat.index, config)
-        plot_feature_importance(feature_cols, cat_model.get_feature_importance(), "CatBoost", config)
+        plot_feature_importance(
+            feature_cols, cat_model.get_feature_importance(), "CatBoost", config
+        )
 
         # ── LSTM ──────────────────────────────────────────────────────────────
         logger.info("=" * 60)
@@ -388,18 +414,18 @@ def run_training(config: Dict[str, Any]) -> None:
         t0 = time.time()
         lstm_preds = train_lstm(X_train, y_train, X_val, y_val, X_test, config)
         all_predictions["lstm"] = lstm_preds
-        lstm_metrics = compute_all_metrics(y_test, lstm_preds[:len(y_test)])
+        lstm_metrics = compute_all_metrics(y_test, lstm_preds[: len(y_test)])
         all_results["lstm"] = lstm_metrics
         logger.info("LSTM — %s  (%.1fs)", lstm_metrics, time.time() - t0)
         if mlflow_enabled:
             mlflow.log_metrics({f"lstm_{k}": v for k, v in lstm_metrics.items()})
-        plot_residuals(y_test, lstm_preds[:len(y_test)], "LSTM", test_feat.index, config)
+        plot_residuals(y_test, lstm_preds[: len(y_test)], "LSTM", test_feat.index, config)
 
         # ── Ensemble ──────────────────────────────────────────────────────────
         logger.info("=" * 60)
         logger.info("Computing weighted ensemble ...")
         ensemble = WeightedEnsemble.from_config(config)
-        aligned_preds = {k: v[:len(y_test)] for k, v in all_predictions.items()}
+        aligned_preds = {k: v[: len(y_test)] for k, v in all_predictions.items()}
         ens_preds = ensemble.predict(aligned_preds)
         all_predictions["ensemble"] = ens_preds
         ens_metrics = compute_all_metrics(y_test, ens_preds)
@@ -411,19 +437,15 @@ def run_training(config: Dict[str, Any]) -> None:
 
         # ── Final plots ───────────────────────────────────────────────────────
         logger.info("Generating final comparison plots ...")
-        aligned_all = {k: v[:len(y_test)] for k, v in all_predictions.items()}
-        plot_forecast_vs_actual(
-            y_test, aligned_all, test_feat.index, config
-        )
+        aligned_all = {k: v[: len(y_test)] for k, v in all_predictions.items()}
+        plot_forecast_vs_actual(y_test, aligned_all, test_feat.index, config)
         plot_metrics_comparison(all_results, config)
 
         # ── Save results ──────────────────────────────────────────────────────
         # ── Walk-forward evaluation ───────────────────────────────────────────
         logger.info("=" * 60)
         logger.info("Running walk-forward evaluation ...")
-        full_feat = build_features(
-            pd.concat([train_raw, val_raw, test_raw]), config, drop_na=True
-        )
+        full_feat = build_features(pd.concat([train_raw, val_raw, test_raw]), config, drop_na=True)
         wf_splits = walk_forward_split(full_feat, config)
         wf_results: Dict[str, list] = {}
         for fold_idx, (wf_train, wf_test) in enumerate(wf_splits):
@@ -432,10 +454,16 @@ def run_training(config: Dict[str, Any]) -> None:
             wf_X_test = wf_test[feature_cols].values
             wf_y_test = wf_test[target].values
             _, wf_preds = train_tree_model(
-                LightGBMForecaster, wf_X_train, wf_y_train,
-                wf_X_train, wf_y_train, wf_X_test, tuned_config, f"LightGBM-wf-{fold_idx}"
+                LightGBMForecaster,
+                wf_X_train,
+                wf_y_train,
+                wf_X_train,
+                wf_y_train,
+                wf_X_test,
+                tuned_config,
+                f"LightGBM-wf-{fold_idx}",
             )
-            fold_metrics = compute_all_metrics(wf_y_test, wf_preds[:len(wf_y_test)])
+            fold_metrics = compute_all_metrics(wf_y_test, wf_preds[: len(wf_y_test)])
             for k, v in fold_metrics.items():
                 wf_results.setdefault(k, []).append(v)
         wf_summary = {k: float(np.mean(v)) for k, v in wf_results.items()}

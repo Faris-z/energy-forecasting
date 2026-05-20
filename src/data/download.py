@@ -4,7 +4,6 @@ Downloads the UCI Household Electric Power Consumption dataset,
 extracts it, and validates the raw file before preprocessing.
 """
 
-import io
 import logging
 import zipfile
 from pathlib import Path
@@ -102,13 +101,12 @@ def validate_raw_file(raw_path: Path, config: Dict[str, Any]) -> None:
     if not raw_path.exists():
         raise FileNotFoundError(f"Raw file not found: {raw_path}")
 
-    size_mb = raw_path.stat().st_size / (1024 ** 2)
+    size_mb = raw_path.stat().st_size / (1024**2)
     logger.info("Raw file size: %.1f MB", size_mb)
 
     if size_mb < 1:
         raise ValueError(
-            f"Raw file appears too small ({size_mb:.2f} MB). "
-            "Download may have been incomplete."
+            f"Raw file appears too small ({size_mb:.2f} MB). " "Download may have been incomplete."
         )
 
     with open(raw_path, "r", encoding="utf-8", errors="replace") as f:
@@ -121,8 +119,6 @@ def validate_raw_file(raw_path: Path, config: Dict[str, Any]) -> None:
     expected_cols = ["Date", "Time", "Global_active_power"]
     for col in expected_cols:
         if col not in header:
-            raise ValueError(
-                f"Expected column '{col}' not found in header: {header}"
-            )
+            raise ValueError(f"Expected column '{col}' not found in header: {header}")
 
     logger.info("Raw file validation passed.")

@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +44,9 @@ class TimeSeriesDataset:
         """Return (sequence, target) tensors for index ``idx``."""
         import torch
 
-        x = self.data[idx: idx + self.seq_len]
+        x = self.data[idx : idx + self.seq_len]
         y = self.targets[idx + self.seq_len]
-        return torch.tensor(x, dtype=torch.float32), torch.tensor(
-            y, dtype=torch.float32
-        )
+        return torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.float32)
 
 
 class LSTMNet:
@@ -83,7 +80,6 @@ class LSTMNet:
         nn.Module
             PyTorch LSTM regression module.
         """
-        import torch
         import torch.nn as nn
 
         directions = 2 if bidirectional else 1
@@ -215,13 +211,9 @@ class LSTMForecaster:
         X_train_s = self._scaler_X.fit_transform(X_train)
         y_train_s = self._scaler_y.fit_transform(y_train.reshape(-1, 1)).ravel()
 
-        X_val_s = (
-            self._scaler_X.transform(X_val) if X_val is not None else None
-        )
+        X_val_s = self._scaler_X.transform(X_val) if X_val is not None else None
         y_val_s = (
-            self._scaler_y.transform(y_val.reshape(-1, 1)).ravel()
-            if y_val is not None
-            else None
+            self._scaler_y.transform(y_val.reshape(-1, 1)).ravel() if y_val is not None else None
         )
 
         return X_train_s, y_train_s, X_val_s, y_val_s
@@ -258,9 +250,7 @@ class LSTMForecaster:
         self._device = self._get_device()
         logger.info("Training LSTM on device: %s", self._device)
 
-        X_train_s, y_train_s, X_val_s, y_val_s = self._scale(
-            X_train, y_train, X_val, y_val
-        )
+        X_train_s, y_train_s, X_val_s, y_val_s = self._scale(X_train, y_train, X_val, y_val)
 
         self._input_size = X_train_s.shape[1]
         self._model = LSTMNet.build(
@@ -305,9 +295,7 @@ class LSTMForecaster:
                 preds = self._model(X_batch)
                 loss = criterion(preds, y_batch)
                 loss.backward()
-                nn.utils.clip_grad_norm_(
-                    self._model.parameters(), self.clip_grad_norm
-                )
+                nn.utils.clip_grad_norm_(self._model.parameters(), self.clip_grad_norm)
                 optimizer.step()
                 train_losses.append(loss.item())
 
@@ -329,10 +317,7 @@ class LSTMForecaster:
                 if avg_val_loss < best_val_loss:
                     best_val_loss = avg_val_loss
                     patience_counter = 0
-                    best_state = {
-                        k: v.cpu().clone()
-                        for k, v in self._model.state_dict().items()
-                    }
+                    best_state = {k: v.cpu().clone() for k, v in self._model.state_dict().items()}
                 else:
                     patience_counter += 1
 
@@ -346,9 +331,7 @@ class LSTMForecaster:
                     )
 
                 if patience_counter >= self.patience:
-                    logger.info(
-                        "Early stopping triggered at epoch %d.", epoch
-                    )
+                    logger.info("Early stopping triggered at epoch %d.", epoch)
                     break
             else:
                 if epoch % 5 == 0 or epoch == 1:
@@ -415,9 +398,7 @@ class LSTMForecaster:
                 preds.append(out)
 
         preds_scaled = np.concatenate(preds)
-        preds_orig = self._scaler_y.inverse_transform(
-            preds_scaled.reshape(-1, 1)
-        ).ravel()
+        preds_orig = self._scaler_y.inverse_transform(preds_scaled.reshape(-1, 1)).ravel()
 
         pad = np.full(self.sequence_length, preds_orig[0])
         return np.concatenate([pad, preds_orig])

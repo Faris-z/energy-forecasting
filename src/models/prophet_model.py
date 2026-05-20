@@ -70,16 +70,16 @@ class ProphetForecaster:
         try:
             from prophet import Prophet
         except ImportError as exc:
-            raise ImportError(
-                "prophet is required: pip install prophet"
-            ) from exc
+            raise ImportError("prophet is required: pip install prophet") from exc
 
         logger.info("Fitting Prophet on %d observations ...", len(series))
 
-        prophet_df = pd.DataFrame({
-            "ds": series.index,
-            "y": series.values,
-        })
+        prophet_df = pd.DataFrame(
+            {
+                "ds": series.index,
+                "y": series.values,
+            }
+        )
 
         self._model = Prophet(
             changepoint_prior_scale=self.changepoint_prior_scale,
@@ -92,6 +92,7 @@ class ProphetForecaster:
         )
 
         import warnings
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self._model.fit(prophet_df)

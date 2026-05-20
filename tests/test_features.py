@@ -86,28 +86,22 @@ class TestRollingFeatures:
 
     def test_rolling_columns_created(self, sample_df: pd.DataFrame) -> None:
         """Expected rolling columns should exist."""
-        result = add_rolling_features(
-            sample_df, "Global_active_power", [6], ["mean", "std"]
-        )
+        result = add_rolling_features(sample_df, "Global_active_power", [6], ["mean", "std"])
         assert "Global_active_power_roll_6h_mean" in result.columns
         assert "Global_active_power_roll_6h_std" in result.columns
 
     def test_no_future_leakage(self, sample_df: pd.DataFrame) -> None:
         """Rolling mean at time t should only use data up to t-1."""
-        result = add_rolling_features(
-            sample_df, "Global_active_power", [3], ["mean"]
-        )
+        result = add_rolling_features(sample_df, "Global_active_power", [3], ["mean"])
         col = result["Global_active_power_roll_3h_mean"]
         orig = sample_df["Global_active_power"]
         for i in range(3, 10):
-            expected = orig.iloc[i - 3: i].mean()
+            expected = orig.iloc[i - 3 : i].mean()
             assert col.iloc[i] == pytest.approx(expected, rel=1e-5)
 
     def test_unknown_stat_skipped(self, sample_df: pd.DataFrame) -> None:
         """Unknown stat names should be skipped without raising."""
-        result = add_rolling_features(
-            sample_df, "Global_active_power", [6], ["nonexistent"]
-        )
+        result = add_rolling_features(sample_df, "Global_active_power", [6], ["nonexistent"])
         assert result.shape == sample_df.shape
 
 
@@ -163,9 +157,7 @@ class TestFourierFeatures:
 class TestInteractionFeatures:
     """Tests for add_interaction_features."""
 
-    def test_interactions_added_when_dependencies_present(
-        self, sample_df: pd.DataFrame
-    ) -> None:
+    def test_interactions_added_when_dependencies_present(self, sample_df: pd.DataFrame) -> None:
         """Interaction columns require lag and calendar columns to be present."""
         df = add_lag_features(sample_df, "Global_active_power", [24, 168])
         df = add_calendar_features(df, ["hour", "dayofweek", "is_weekend", "month"])
@@ -173,9 +165,7 @@ class TestInteractionFeatures:
         assert "lag24_x_hour" in result.columns
         assert "lag168_x_dow" in result.columns
 
-    def test_no_interactions_without_dependencies(
-        self, sample_df: pd.DataFrame
-    ) -> None:
+    def test_no_interactions_without_dependencies(self, sample_df: pd.DataFrame) -> None:
         """Should not fail even if required columns are absent."""
         result = add_interaction_features(sample_df, "Global_active_power")
         assert isinstance(result, pd.DataFrame)
@@ -184,23 +174,17 @@ class TestInteractionFeatures:
 class TestBuildFeatures:
     """Tests for the full build_features pipeline."""
 
-    def test_output_has_more_columns(
-        self, sample_df: pd.DataFrame, config: dict
-    ) -> None:
+    def test_output_has_more_columns(self, sample_df: pd.DataFrame, config: dict) -> None:
         """Feature engineering should significantly increase column count."""
         result = build_features(sample_df, config, drop_na=True)
         assert result.shape[1] > sample_df.shape[1]
 
-    def test_no_nans_when_drop_na(
-        self, sample_df: pd.DataFrame, config: dict
-    ) -> None:
+    def test_no_nans_when_drop_na(self, sample_df: pd.DataFrame, config: dict) -> None:
         """With drop_na=True, result should have zero NaN values."""
         result = build_features(sample_df, config, drop_na=True)
         assert result.isnull().sum().sum() == 0
 
-    def test_target_column_preserved(
-        self, sample_df: pd.DataFrame, config: dict
-    ) -> None:
+    def test_target_column_preserved(self, sample_df: pd.DataFrame, config: dict) -> None:
         """The target column must still exist after feature engineering."""
         result = build_features(sample_df, config, drop_na=True)
         assert "Global_active_power" in result.columns
@@ -215,9 +199,7 @@ class TestGetFeatureColumns:
         cols = get_feature_columns(df, "Global_active_power")
         assert "Global_active_power" not in cols
 
-    def test_returns_list_of_strings(
-        self, sample_df: pd.DataFrame, config: dict
-    ) -> None:
+    def test_returns_list_of_strings(self, sample_df: pd.DataFrame, config: dict) -> None:
         """Should return a plain Python list of strings."""
         df = build_features(sample_df, config, drop_na=True)
         cols = get_feature_columns(df, "Global_active_power")

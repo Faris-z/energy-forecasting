@@ -4,10 +4,6 @@ Tests cover cleaning, resampling, splitting, and the validation
 of raw file structure without requiring a real download.
 """
 
-import io
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -67,9 +63,7 @@ class TestCleanData:
         cleaned = clean_data(dirty, raw_config)
         assert cleaned["Global_active_power"].isnull().sum() == 0
 
-    def test_outlier_clipping(
-        self, sample_minute_df: pd.DataFrame, raw_config: dict
-    ) -> None:
+    def test_outlier_clipping(self, sample_minute_df: pd.DataFrame, raw_config: dict) -> None:
         """Extreme values should be clipped to the 0.1–99.9 percentile."""
         dirty = sample_minute_df.copy()
         dirty.loc[dirty.index[0], "Global_active_power"] = 9999.0
@@ -78,16 +72,12 @@ class TestCleanData:
         q_high = sample_minute_df["Global_active_power"].quantile(0.999)
         assert cleaned["Global_active_power"].max() <= q_high * 1.01
 
-    def test_returns_dataframe(
-        self, sample_minute_df: pd.DataFrame, raw_config: dict
-    ) -> None:
+    def test_returns_dataframe(self, sample_minute_df: pd.DataFrame, raw_config: dict) -> None:
         """Return type must be a pd.DataFrame."""
         result = clean_data(sample_minute_df, raw_config)
         assert isinstance(result, pd.DataFrame)
 
-    def test_columns_unchanged(
-        self, sample_minute_df: pd.DataFrame, raw_config: dict
-    ) -> None:
+    def test_columns_unchanged(self, sample_minute_df: pd.DataFrame, raw_config: dict) -> None:
         """Column set must not change during cleaning."""
         result = clean_data(sample_minute_df, raw_config)
         assert set(result.columns) == set(sample_minute_df.columns)
@@ -102,20 +92,18 @@ class TestResampleToHourly:
         """Result must have a 1-hour frequency DatetimeIndex."""
         result = resample_to_hourly(sample_minute_df, raw_config)
         inferred = pd.infer_freq(result.index)
-        assert inferred in ("h", "H", "1h", "T", None) or len(result) == len(
-            sample_minute_df
-        ) // 60 + 1 or result.index.freq is not None
+        assert (
+            inferred in ("h", "H", "1h", "T", None)
+            or len(result) == len(sample_minute_df) // 60 + 1
+            or result.index.freq is not None
+        )
 
-    def test_row_count_reduces(
-        self, sample_minute_df: pd.DataFrame, raw_config: dict
-    ) -> None:
+    def test_row_count_reduces(self, sample_minute_df: pd.DataFrame, raw_config: dict) -> None:
         """Hourly resampled data must have fewer rows than minute-level input."""
         result = resample_to_hourly(sample_minute_df, raw_config)
         assert len(result) < len(sample_minute_df)
 
-    def test_no_nans_in_result(
-        self, sample_minute_df: pd.DataFrame, raw_config: dict
-    ) -> None:
+    def test_no_nans_in_result(self, sample_minute_df: pd.DataFrame, raw_config: dict) -> None:
         """Result must be free of NaN values."""
         result = resample_to_hourly(sample_minute_df, raw_config)
         assert result.isnull().sum().sum() == 0
@@ -134,33 +122,25 @@ class TestSplitData:
             index=idx,
         )
 
-    def test_split_sizes_sum_to_total(
-        self, hourly_df: pd.DataFrame, raw_config: dict
-    ) -> None:
+    def test_split_sizes_sum_to_total(self, hourly_df: pd.DataFrame, raw_config: dict) -> None:
         """Train + val + test must equal total rows."""
         train, val, test = split_data(hourly_df, raw_config)
         assert len(train) + len(val) + len(test) == len(hourly_df)
 
-    def test_chronological_order(
-        self, hourly_df: pd.DataFrame, raw_config: dict
-    ) -> None:
+    def test_chronological_order(self, hourly_df: pd.DataFrame, raw_config: dict) -> None:
         """train end < val start < val end < test start."""
         train, val, test = split_data(hourly_df, raw_config)
         assert train.index.max() < val.index.min()
         assert val.index.max() < test.index.min()
 
-    def test_no_overlap(
-        self, hourly_df: pd.DataFrame, raw_config: dict
-    ) -> None:
+    def test_no_overlap(self, hourly_df: pd.DataFrame, raw_config: dict) -> None:
         """No index value should appear in more than one split."""
         train, val, test = split_data(hourly_df, raw_config)
         assert len(train.index.intersection(val.index)) == 0
         assert len(val.index.intersection(test.index)) == 0
         assert len(train.index.intersection(test.index)) == 0
 
-    def test_approximate_ratios(
-        self, hourly_df: pd.DataFrame, raw_config: dict
-    ) -> None:
+    def test_approximate_ratios(self, hourly_df: pd.DataFrame, raw_config: dict) -> None:
         """Each split ratio should be within 2 percentage points of target."""
         train, val, test = split_data(hourly_df, raw_config)
         n = len(hourly_df)

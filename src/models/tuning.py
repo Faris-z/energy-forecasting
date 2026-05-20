@@ -134,9 +134,7 @@ def run_optuna_tuning(
     )
 
     study.optimize(
-        lambda trial: _lgb_objective(
-            trial, df, target_col, feature_cols, config
-        ),
+        lambda trial: _lgb_objective(trial, df, target_col, feature_cols, config),
         n_trials=n_trials,
         timeout=opt_cfg.get("timeout"),
         show_progress_bar=True,
