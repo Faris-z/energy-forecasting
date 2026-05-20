@@ -1,4 +1,4 @@
-# ⚡ energy-forecasting
+# energy-forecasting
 
 [![CI](https://github.com/Faris-z/energy-forecasting/actions/workflows/ci.yml/badge.svg)](https://github.com/Faris-z/energy-forecasting/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
@@ -10,12 +10,12 @@ Production-grade deep learning pipeline for 24-hour-ahead household energy forec
 
 ---
 
-## 🚀 Live Demo
+## Live Demo
 [![Hugging Face Spaces](https://img.shields.io/badge/🤗-Live%20Demo-blue)](https://huggingface.co/spaces/Faris-zh/energy-forecasting)
 ---
 
 
-## ✨ Features
+## Features
 
 - **7 Models**: ARIMA baseline → Prophet → XGBoost → LightGBM → CatBoost → LSTM (PyTorch) → Weighted Ensemble
 - **Rich Feature Engineering**: lag features (1h–168h), rolling statistics, calendar features, Fourier encodings, interaction terms
@@ -28,7 +28,7 @@ Production-grade deep learning pipeline for 24-hour-ahead household energy forec
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 energy-forecasting/
@@ -77,7 +77,7 @@ energy-forecasting/
 
 ---
 
-## 🔄 Pipeline Flow
+## Pipeline Flow
 
 ```
  ┌──────────────┐
@@ -143,7 +143,7 @@ energy-forecasting/
 
 ---
 
-## 📊 Results
+## Results
 
 > Results on the UCI test split (holdout chronological last 15%).
 
@@ -161,7 +161,7 @@ energy-forecasting/
 
 ---
 
-## 🚀 How to Reproduce
+## How to Reproduce
 
 ### Prerequisites
 
@@ -225,7 +225,7 @@ docker run --rm -v $(pwd)/data:/app/data -v $(pwd)/reports:/app/reports energy-f
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 All hyperparameters live in `config/config.yaml`. Key sections:
 
@@ -251,7 +251,7 @@ optuna:
 
 ---
 
-## 📈 Generated Figures
+## Generated Figures
 
 | Figure | Description |
 |--------|-------------|
@@ -265,12 +265,12 @@ optuna:
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
-## 📄 License
+## License
 
 [MIT](LICENSE) © 2024 Energy Forecasting Contributors
