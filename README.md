@@ -10,6 +10,11 @@ Production-grade deep learning pipeline for 24-hour-ahead household energy forec
 
 ---
 
+## 🚀 Live Demo
+[![Hugging Face Spaces](https://img.shields.io/badge/🤗-Live%20Demo-blue)](https://huggingface.co/spaces/Faris-zh/energy-forecasting)
+---
+
+
 ## ✨ Features
 
 - **7 Models**: ARIMA baseline → Prophet → XGBoost → LightGBM → CatBoost → LSTM (PyTorch) → Weighted Ensemble

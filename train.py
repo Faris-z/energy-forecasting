@@ -17,10 +17,9 @@ import logging
 import time
 from pathlib import Path
 from typing import Any, Dict
-
+import torch
 import numpy as np
 import pandas as pd
-
 from src.data.preprocessing import load_processed_data
 from src.evaluation.metrics import compute_all_metrics, walk_forward_split
 from src.features.engineering import build_features, get_feature_columns
@@ -43,6 +42,8 @@ from src.visualization.plots import (
 
 logger = logging.getLogger(__name__)
 
+print(torch.cuda.is_available())    # should print True
+print(torch.cuda.get_device_name(0))
 
 class _NullContext:
     """No-op context manager used when MLflow is unavailable."""
