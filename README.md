@@ -1,175 +1,55 @@
 # energy-forecasting
 
 [![CI](https://github.com/Faris-z/energy-forecasting/actions/workflows/ci.yml/badge.svg)](https://github.com/Faris-z/energy-forecasting/actions/workflows/ci.yml)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![MLflow](https://img.shields.io/badge/tracking-MLflow-orange)](https://mlflow.org/)
 
-Production-grade deep learning pipeline for 24-hour-ahead household energy forecasting using the [UCI Household Electric Power Consumption](https://archive.ics.uci.edu/ml/datasets/Individual+household+electric+power+consumption) dataset.
+Hourly household energy forecasting pipeline on the UCI Individual Household Electric Power Consumption dataset, comparing gradient-boosted trees, an LSTM, an ensemble, and classical baselines.
 
----
+> **Status:** the pipeline runs end to end, but the evaluation setup has known issues (see [Limitations](#limitations--next-steps)). No verified results are published yet.
 
-## Live Demo
-[![Hugging Face Spaces](https://img.shields.io/badge/🤗-Live%20Demo-blue)](https://huggingface.co/spaces/Faris-zh/energy-forecasting)
----
+## Problem
 
+Predict household electricity use (`Global_active_power`, kW) at an hourly resolution from its own history and calendar patterns, and compare classical, gradient-boosting and deep learning approaches under the same split.
 
-## Features
+## Approach
 
-- **7 Models**: ARIMA baseline → Prophet → XGBoost → LightGBM → CatBoost → LSTM (PyTorch) → Weighted Ensemble
-- **Rich Feature Engineering**: lag features (1h–168h), rolling statistics, calendar features, Fourier encodings, interaction terms
-- **No Data Leakage**: walk-forward cross-validation with temporal splits
-- **Hyperparameter Tuning**: Optuna TPE search (50 trials) for LightGBM, saved to `models/best_params.json`
-- **Experiment Tracking**: MLflow logs all metrics, parameters, and plot artifacts
-- **Auto-generated Plots**: forecast vs actual, residuals, SHAP importance, seasonal decomposition, correlation heatmap
-- **Code Quality**: full type hints, NumPy docstrings, `black` formatting, `flake8` linting
-- **Container-ready**: Dockerfile with multi-stage build
+**Data** (`src/data/`)
+- [UCI Individual Household Electric Power Consumption](https://archive.ics.uci.edu/ml/datasets/Individual+household+electric+power+consumption): 2M+ minute-level readings from one household, downloaded automatically.
+- Cleaned, resampled to hourly means, and split chronologically into train / validation / test (70% / 15% / 15%).
 
----
+**Features** (`src/features/engineering.py`, 51 engineered features)
+- Lags of the target: 1, 6, 12, 24, 48, 168 hours (6)
+- Rolling mean / std / min / max over 6, 12, 24, 48, 168 hours, computed on the shifted series (20)
+- Calendar: hour, day of week, month, quarter, day of year, week of year, weekend flag, holiday flag (8)
+- Fourier terms for daily and weekly periods, 3 harmonics each, sin and cos (12)
+- Interactions such as `lag24 x hour` and `lag168 x dayofweek` (5)
 
-## Architecture
+**Models** (`src/models/`)
+- Baselines: SARIMA and Prophet
+- Gradient boosting: XGBoost, LightGBM, CatBoost (validation split passed as the eval set)
+- LSTM in PyTorch: 2 layers, hidden size 128, 168-hour input window, early stopping
+- Weighted ensemble of all six, with weights fixed in `config/config.yaml` (not learned)
 
-```
-energy-forecasting/
-│
-├── config/
-│   └── config.yaml              ← All hyperparameters (no hardcoded values)
-│
-├── src/
-│   ├── data/
-│   │   ├── download.py          ← Auto-download & validate UCI dataset
-│   │   └── preprocessing.py    ← Clean → resample → split pipeline
-│   │
-│   ├── features/
-│   │   └── engineering.py      ← Lag / rolling / calendar / Fourier features
-│   │
-│   ├── models/
-│   │   ├── arima_model.py      ← SARIMA baseline
-│   │   ├── prophet_model.py    ← Facebook Prophet
-│   │   ├── tree_models.py      ← XGBoost · LightGBM · CatBoost
-│   │   ├── lstm_model.py       ← PyTorch multi-layer LSTM
-│   │   ├── ensemble.py         ← Weighted ensemble blender
-│   │   └── tuning.py           ← Optuna 50-trial LightGBM search
-│   │
-│   ├── evaluation/
-│   │   └── metrics.py          ← RMSE · MAE · MAPE · walk-forward CV
-│   │
-│   ├── visualization/
-│   │   └── plots.py            ← All figure generation (headless PNG)
-│   │
-│   └── utils.py                ← Config loading · logging · seeding
-│
-├── tests/
-│   ├── conftest.py
-│   ├── test_features.py        ← Feature engineering tests
-│   ├── test_metrics.py         ← Metrics + walk-forward tests
-│   └── test_data.py            ← Preprocessing pipeline tests
-│
-├── prepare_data.py             ← make data entry point
-├── train.py                    ← make train entry point
-├── Makefile
-├── Dockerfile
-├── requirements.txt
-├── pyproject.toml
-└── .github/workflows/ci.yml
-```
-
----
-
-## Pipeline Flow
-
-```
- ┌──────────────┐
- │  UCI Dataset │  (auto-download, ~500 MB, 2M+ minute-level rows)
- └──────┬───────┘
-        │  prepare_data.py
-        ▼
- ┌──────────────────┐
- │  Preprocessing   │  clean → hourly resample → train/val/test split
- └──────┬───────────┘
-        │
-        ▼
- ┌──────────────────────────────────────────────────┐
- │  Feature Engineering                             │
- │  • Lag features     (1h, 6h, 12h, 24h, 48h, 168h)│
- │  • Rolling stats    (mean, std, min, max)         │
- │  • Calendar         (hour, DoW, month, holiday)  │
- │  • Fourier          (daily + weekly harmonics)   │
- │  • Interactions     (lag × hour, lag², etc.)     │
- └──────┬───────────────────────────────────────────┘
-        │
-        ├──────────────────────────────────┐
-        │                                  │
-        ▼                                  ▼
- ┌─────────────┐                   ┌──────────────┐
- │   ARIMA     │                   │   Prophet    │
- └──────┬──────┘                   └──────┬───────┘
-        │                                  │
-        ▼                                  ▼
- ┌─────────────┐   ┌──────────────┐  ┌──────────────┐
- │  XGBoost   │   │  LightGBM   │  │  CatBoost   │
- └──────┬──────┘   └──────┬───────┘  └──────┬───────┘
-        │                 │  Optuna 50x       │
-        │                 ▼                   │
-        │          ┌──────────────┐           │
-        │          │  Best Params │           │
-        │          └──────────────┘           │
-        │                                     │
-        ▼                                     ▼
- ┌─────────────────────────────────────────────────┐
- │                 LSTM (PyTorch)                   │
- │         seq_len=168h · 2-layer · dropout=0.2     │
- └──────────────────────┬──────────────────────────┘
-                        │
-                        ▼
- ┌─────────────────────────────────────────────────┐
- │           Weighted Ensemble                      │
- │   ARIMA×0.05 · Prophet×0.10 · XGB×0.15          │
- │   LGB×0.25  · Cat×0.20    · LSTM×0.25           │
- └──────────────────────┬──────────────────────────┘
-                        │
-                        ▼
- ┌─────────────────────────────────────────────────┐
- │  Walk-Forward Evaluation (5 folds, no leakage)  │
- │  Metrics: RMSE · MAE · MAPE                     │
- └─────────────────────────────────────────────────┘
-                        │
-                        ▼
- ┌─────────────────────────────────────────────────┐
- │  Reports: figures/ + MLflow + models/results.json│
- └─────────────────────────────────────────────────┘
-```
-
----
+**Tuning and tracking**
+- Optuna (TPE, 50 trials) tunes LightGBM, scoring each trial by walk-forward RMSE on train + validation data.
+- MLflow logs parameters, per-model metrics, the results file and the generated figures.
 
 ## Results
 
-> Results on the UCI test split (holdout chronological last 15%).
+**TODO: no verified results yet.** The repository does not contain a saved results file or MLflow run, and the evaluation setup needs the fixes listed below before any numbers are meaningful.
 
-| Model            |  RMSE  |  MAE   | MAPE % |
-|------------------|--------|--------|--------|
-| ARIMA            | 0.8942 | 0.6731 | 38.21  |
-| Prophet          | 0.7514 | 0.5612 | 32.84  |
-| XGBoost          | 0.4123 | 0.3021 | 17.43  |
-| LightGBM         | 0.3891 | 0.2843 | 16.12  |
-| CatBoost         | 0.3967 | 0.2901 | 16.74  |
-| LSTM             | 0.3612 | 0.2654 | 14.98  |
-| **Ensemble**     |**0.3284**|**0.2401**|**13.52**|
+What `train.py` currently evaluates:
+- **Holdout:** every model is scored on the chronological last 15% of the hourly series.
+- **Walk-forward:** LightGBM only, 5 expanding-window folds (`TimeSeriesSplit`) with 168-hour test windows, taken from the full series.
+- **Metrics:** RMSE, MAE, MAPE. Results are written to `models/results.json` and logged to MLflow.
 
-*Your results may vary slightly due to hardware and OS differences.*
+## Tech Stack
 
----
+Python, pandas, NumPy, scikit-learn, statsmodels, Prophet, XGBoost, LightGBM, CatBoost, PyTorch, Optuna, MLflow, SHAP, matplotlib / seaborn, pytest, GitHub Actions (flake8, black, isort, pytest), Docker.
 
-## How to Reproduce
+## How to Run
 
-### Prerequisites
-
-- Python 3.10+
-- (Optional) CUDA GPU for faster LSTM training
-- ~4 GB RAM, ~2 GB disk
-
-### 1. Clone and install
+Requires Python 3.10+.
 
 ```bash
 git clone https://github.com/Faris-z/energy-forecasting.git
@@ -177,100 +57,42 @@ cd energy-forecasting
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 make install
+make data    # download the UCI dataset, resample to hourly, save the splits
+make train   # train all models, run Optuna, write models/results.json and figures
+make test    # pytest with coverage
 ```
 
-### 2. Download & preprocess data
+> **TODO:** `train.py` calls `torch.cuda.get_device_name(0)` at import time, so `make train` currently fails on machines without a CUDA GPU, including the default Docker container.
+
+Results and figures:
 
 ```bash
-make data
-# Downloads ~500 MB from UCI, resamples to hourly, saves Parquet splits
-# Expected time: 2–5 minutes depending on network speed
-```
-
-### 3. Train all models
-
-```bash
-make train
-# Trains 6 models + Optuna tuning + generates all plots
-# Expected time: 30–90 minutes (GPU) / 2–4 hours (CPU)
-```
-
-### 4. View results
-
-```bash
-# Metrics summary printed to console and saved to models/results.json
 cat models/results.json
-
-# Open MLflow UI
-mlflow ui --backend-store-uri mlruns/
-# Navigate to http://localhost:5000
-
-# View generated plots
+mlflow ui --backend-store-uri mlruns/   # then open http://localhost:5000
 ls reports/figures/
 ```
 
-### 5. Run tests
-
-```bash
-make test
-# Runs pytest with coverage report
-```
-
-### Docker
+Docker:
 
 ```bash
 docker build -t energy-forecasting .
 docker run --rm -v $(pwd)/data:/app/data -v $(pwd)/reports:/app/reports energy-forecasting
 ```
 
----
+All hyperparameters live in `config/config.yaml`.
 
-## Configuration
+Live demo: **TODO.** The linked Hugging Face Space is currently in a runtime-error state and runs on synthetic data, not this pipeline.
 
-All hyperparameters live in `config/config.yaml`. Key sections:
+## Limitations / Next Steps
 
-```yaml
-forecasting:
-  horizon: 24        # hours ahead
-
-features:
-  lags: [1, 6, 12, 24, 48, 168]
-  fourier_periods: [24, 168]   # daily + weekly
-
-lstm:
-  hidden_size: 128
-  num_layers: 2
-  sequence_length: 168   # 1 week context window
-  num_epochs: 50
-  patience: 10           # early stopping
-
-optuna:
-  n_trials: 50
-  direction: minimize
-```
-
----
-
-## Generated Figures
-
-| Figure | Description |
-|--------|-------------|
-| `forecast_vs_actual.png` | All models vs ground truth on test set |
-| `residuals_*.png` | Per-model residual time series + histogram |
-| `feature_importance_*.png` | Top-25 feature importance bar chart |
-| `shap_summary_xgboost.png` | SHAP beeswarm for XGBoost |
-| `seasonal_decomposition.png` | Trend + seasonal + residual decomposition |
-| `correlation_heatmap.png` | Pearson correlations for top-20 features |
-| `metrics_comparison.png` | Side-by-side RMSE/MAE/MAPE bar chart |
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
----
+- **Leakage:** every raw same-hour column (for example `Global_intensity`, `Voltage`, the sub-meterings) is used as a feature. `Global_intensity` is nearly proportional to the target. Next: keep only lagged versions of these columns.
+- **Horizon:** the tree models and the LSTM predict one step (1 hour) ahead from actual lagged values, while ARIMA and Prophet forecast the whole test period from the end of training, so the comparison is not like for like. Next: build a true multi-step target (for example shift the target by the horizon and drop lags shorter than it) and evaluate every model on it.
+- **Single holdout:** the per-model metrics come from one chronological 15% split. The walk-forward evaluation covers LightGBM only, and its folds fall inside that same holdout period. Next: run walk-forward evaluation for all models on a fixed protocol.
+- **No saved results:** commit `models/results.json` (or an MLflow export) and the key figures from a real run once the fixes above are in.
+- **CPU crash:** remove the unconditional CUDA print in `train.py` so it runs on CPU and in Docker.
+- **Holiday flag:** uses US holidays, while the dataset comes from a household in France. Next: use French holidays.
+- **Ensemble:** weights are hand-set in the config. Next: fit them on the validation split.
 
 ## License
 
-[MIT](LICENSE) © 2024 Energy Forecasting Contributors
+[MIT](LICENSE)
