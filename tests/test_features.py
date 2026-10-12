@@ -189,6 +189,23 @@ class TestBuildFeatures:
         result = build_features(sample_df, config, drop_na=True)
         assert "Global_active_power" in result.columns
 
+    def test_same_hour_columns_dropped(self, sample_df: pd.DataFrame, config: dict) -> None:
+        """Raw same-hour measurements must not become features (they leak the target)."""
+        df = sample_df.copy()
+        df["Global_intensity"] = df["Global_active_power"] * 4.2
+        df["Voltage"] = 240.0
+        result = build_features(df, config, drop_na=True)
+        cols = get_feature_columns(result, "Global_active_power")
+        assert "Global_intensity" not in cols
+        assert "Voltage" not in cols
+
+    def test_input_not_modified(self, sample_df: pd.DataFrame, config: dict) -> None:
+        """build_features should not drop columns from the caller's DataFrame."""
+        df = sample_df.copy()
+        df["Voltage"] = 240.0
+        build_features(df, config, drop_na=True)
+        assert "Voltage" in df.columns
+
 
 class TestGetFeatureColumns:
     """Tests for get_feature_columns."""

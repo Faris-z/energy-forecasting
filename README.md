@@ -24,6 +24,8 @@ Predict household electricity use (`Global_active_power`, kW) at an hourly resol
 - Fourier terms for daily and weekly periods, 3 harmonics each, sin and cos (12)
 - Interactions such as `lag24 x hour` and `lag168 x dayofweek` (5)
 
+Features come only from the target's own history and the timestamp. The other raw measurements (`Global_intensity`, `Voltage`, `Global_reactive_power`, sub-meterings) are recorded in the same hour as the target, so `build_features` drops them to avoid leakage.
+
 **Models** (`src/models/`)
 - Baselines: SARIMA and Prophet
 - Gradient boosting: XGBoost, LightGBM, CatBoost (validation split passed as the eval set)
@@ -36,7 +38,7 @@ Predict household electricity use (`Global_active_power`, kW) at an hourly resol
 
 ## Results
 
-**TODO: no verified results yet.** The repository does not contain a saved results file or MLflow run, and the evaluation setup needs the fixes listed below before any numbers are meaningful.
+**TODO: no verified results yet.** The pipeline has not been re-run since the same-hour leakage was removed, the repository does not contain a saved results file or MLflow run, and the evaluation setup still needs the fixes listed below before any numbers are meaningful.
 
 What `train.py` currently evaluates:
 - **Holdout:** every model is scored on the chronological last 15% of the hourly series.
@@ -62,7 +64,7 @@ make train   # train all models, run Optuna, write models/results.json and figur
 make test    # pytest with coverage
 ```
 
-> **TODO:** `train.py` calls `torch.cuda.get_device_name(0)` at import time, so `make train` currently fails on machines without a CUDA GPU, including the default Docker container.
+Runs on CPU; the LSTM uses a CUDA GPU automatically if one is available.
 
 Results and figures:
 
@@ -85,11 +87,9 @@ Live demo: **TODO.** The linked Hugging Face Space is currently in a runtime-err
 
 ## Limitations / Next Steps
 
-- **Leakage:** every raw same-hour column (for example `Global_intensity`, `Voltage`, the sub-meterings) is used as a feature. `Global_intensity` is nearly proportional to the target. Next: keep only lagged versions of these columns.
 - **Horizon:** the tree models and the LSTM predict one step (1 hour) ahead from actual lagged values, while ARIMA and Prophet forecast the whole test period from the end of training, so the comparison is not like for like. Next: build a true multi-step target (for example shift the target by the horizon and drop lags shorter than it) and evaluate every model on it.
 - **Single holdout:** the per-model metrics come from one chronological 15% split. The walk-forward evaluation covers LightGBM only, and its folds fall inside that same holdout period. Next: run walk-forward evaluation for all models on a fixed protocol.
 - **No saved results:** commit `models/results.json` (or an MLflow export) and the key figures from a real run once the fixes above are in.
-- **CPU crash:** remove the unconditional CUDA print in `train.py` so it runs on CPU and in Docker.
 - **Holiday flag:** uses US holidays, while the dataset comes from a household in France. Next: use French holidays.
 - **Ensemble:** weights are hand-set in the config. Next: fit them on the validation split.
 

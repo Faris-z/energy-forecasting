@@ -262,12 +262,16 @@ def build_features(
     """Run the complete feature engineering pipeline.
 
     Applies all feature transformations in the correct order to avoid
-    data leakage. Optionally drops rows with NaN (caused by initial lags).
+    data leakage. Only the target column is kept from the input: the other
+    raw measurements (e.g. ``Global_intensity``, ``Voltage``) are recorded
+    in the same hour as the target and would leak it. Optionally drops rows
+    with NaN (caused by initial lags).
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input hourly DataFrame with at least the target column.
+        Input hourly DataFrame with at least the target column. Any other
+        columns are dropped.
     config : Dict[str, Any]
         Project configuration dictionary.
     drop_na : bool
@@ -282,6 +286,11 @@ def build_features(
     feat_cfg = config["features"]
 
     logger.info("Starting feature engineering ...")
+
+    same_hour_cols = [c for c in df.columns if c != target]
+    if same_hour_cols:
+        logger.info("Dropping same-hour input columns to avoid leakage: %s", same_hour_cols)
+    df = df[[target]].copy()
 
     df = add_lag_features(df, target, feat_cfg["lags"])
     df = add_rolling_features(df, target, feat_cfg["rolling_windows"], feat_cfg["rolling_stats"])
