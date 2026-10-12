@@ -54,7 +54,7 @@ clean:         ## Remove all generated artefacts (data, models, reports, logs)
 	rm -rf reports/figures/
 	rm -rf reports/coverage/
 	rm -rf logs/
-	rm -rf mlruns/
+	rm -rf mlruns/ mlflow.db
 	rm -rf .pytest_cache/ .mypy_cache/ __pycache__/
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -name "*.pyc" -delete

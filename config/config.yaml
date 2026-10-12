@@ -3,7 +3,7 @@ project:
   version: "1.0.0"
   random_seed: 42
   mlflow_experiment: "energy_forecasting"
-  mlflow_tracking_uri: "mlruns"
+  mlflow_tracking_uri: "sqlite:///mlflow.db"   # MLflow 3.x no longer accepts the ./mlruns file store
 
 data:
   url: "https://archive.ics.uci.edu/ml/machine-learning-databases/00235/household_power_consumption.zip"

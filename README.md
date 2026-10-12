@@ -74,7 +74,7 @@ Results and figures:
 
 ```bash
 cat models/results.json
-mlflow ui --backend-store-uri mlruns/   # then open http://localhost:5000
+mlflow ui --backend-store-uri sqlite:///mlflow.db   # then open http://localhost:5000
 ls reports/figures/
 ```
 
