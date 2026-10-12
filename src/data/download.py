@@ -7,9 +7,9 @@ extracts it, and validates the raw file before preprocessing.
 import logging
 import zipfile
 from pathlib import Path
-from typing import Dict, Any
-from urllib.request import urlretrieve
+from typing import Any, Dict
 from urllib.error import URLError
+from urllib.request import urlretrieve
 
 logger = logging.getLogger(__name__)
 

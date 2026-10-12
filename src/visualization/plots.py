@@ -4,14 +4,16 @@ All plots are saved automatically to ``reports/figures/`` in PNG format.
 No plots are shown interactively (``plt.show()`` is never called) so
 the module works in headless/container environments.
 """
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
+
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
 matplotlib.use("Agg")  # headless backend — must precede pyplot import
 
 

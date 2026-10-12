@@ -411,8 +411,8 @@ class LSTMForecaster:
         path : str
             Directory path to save artefacts.
         """
-        import torch
         import joblib
+        import torch
 
         save_dir = Path(path)
         save_dir.mkdir(parents=True, exist_ok=True)
