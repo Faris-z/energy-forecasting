@@ -199,6 +199,40 @@ class TestBuildFeatures:
         assert "Global_intensity" not in cols
         assert "Voltage" not in cols
 
+    def test_lags_below_horizon_skipped(self, sample_df: pd.DataFrame, config: dict) -> None:
+        """Lags shorter than the horizon are unknown at forecast time and must be dropped."""
+        cfg = {**config, "forecasting": {"horizon": 12}}
+        result = build_features(sample_df, cfg, drop_na=True)
+        assert "Global_active_power_lag_1h" not in result.columns
+        assert "Global_active_power_lag_6h" not in result.columns
+        assert "Global_active_power_lag_12h" in result.columns
+        assert "Global_active_power_lag_24h" in result.columns
+
+    def test_features_ignore_last_horizon_hours(
+        self, sample_df: pd.DataFrame, config: dict
+    ) -> None:
+        """Changing the target in (t - horizon, t] must not change any feature at t."""
+        horizon = 12
+        cfg = {**config, "forecasting": {"horizon": horizon}}
+        t = sample_df.index[200]
+        changed = sample_df.copy()
+        window = (changed.index > t - pd.Timedelta(hours=horizon)) & (changed.index <= t)
+        changed.loc[window, "Global_active_power"] += 100.0
+
+        before = build_features(sample_df, cfg, drop_na=False)
+        after = build_features(changed, cfg, drop_na=False)
+        cols = get_feature_columns(before, "Global_active_power")
+        pd.testing.assert_series_equal(before.loc[t, cols], after.loc[t, cols])
+
+    def test_lags_are_hour_based_across_gaps(self, sample_df: pd.DataFrame, config: dict) -> None:
+        """A missing stretch must not shift lags: lag_24h is the value 24 hours earlier."""
+        gappy = sample_df.drop(sample_df.index[100:110])
+        result = build_features(gappy, config, drop_na=False)
+        lag = result["Global_active_power_lag_24h"].dropna()
+        expected = gappy["Global_active_power"].reindex(lag.index - pd.Timedelta(hours=24))
+        np.testing.assert_allclose(lag.values, expected.values)
+        assert len(result) == len(gappy)
+
     def test_input_not_modified(self, sample_df: pd.DataFrame, config: dict) -> None:
         """build_features should not drop columns from the caller's DataFrame."""
         df = sample_df.copy()

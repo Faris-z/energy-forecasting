@@ -133,6 +133,35 @@ class ProphetForecaster:
         predictions = np.clip(predictions, 0, None)
         return predictions
 
+    def predict_at(self, timestamps: pd.DatetimeIndex) -> np.ndarray:
+        """Forecast the given timestamps.
+
+        Prophet's forecast depends only on the timestamp (trend plus
+        seasonality), never on recent observations, so the prediction for an
+        hour is the same whichever forecast origin it is made from. The model
+        is not refit after training, so it never sees post-training data.
+
+        Parameters
+        ----------
+        timestamps : pd.DatetimeIndex
+            Timestamps after the training period.
+
+        Returns
+        -------
+        np.ndarray
+            One forecast per timestamp, clipped at zero.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not been fitted yet.
+        """
+        if self._model is None:
+            raise RuntimeError("Model must be fitted before calling predict_at().")
+
+        forecast = self._model.predict(pd.DataFrame({"ds": timestamps}))
+        return np.clip(forecast["yhat"].values, 0, None)
+
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "ProphetForecaster":
         """Instantiate ProphetForecaster from project config.

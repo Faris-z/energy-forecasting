@@ -18,6 +18,7 @@ def add_lag_features(
     df: pd.DataFrame,
     target_col: str,
     lags: List[int],
+    min_lag: int = 1,
 ) -> pd.DataFrame:
     """Add lagged values of the target column as new features.
 
@@ -29,6 +30,9 @@ def add_lag_features(
         Name of the target column to lag.
     lags : List[int]
         List of lag offsets in hours (e.g., [1, 6, 12, 24]).
+    min_lag : int
+        Smallest lag allowed. Lags below it are skipped, because they would
+        not be known at forecast time (set this to the forecast horizon).
 
     Returns
     -------
@@ -37,6 +41,9 @@ def add_lag_features(
     """
     df = df.copy()
     for lag in lags:
+        if lag < min_lag:
+            logger.warning("Skipping lag %dh: shorter than the %dh horizon.", lag, min_lag)
+            continue
         col_name = f"{target_col}_lag_{lag}h"
         df[col_name] = df[target_col].shift(lag)
         logger.debug("Added lag feature: %s", col_name)
@@ -48,6 +55,7 @@ def add_rolling_features(
     target_col: str,
     windows: List[int],
     stats: List[str],
+    shift: int = 1,
 ) -> pd.DataFrame:
     """Add rolling window statistics for the target column.
 
@@ -62,6 +70,10 @@ def add_rolling_features(
     stats : List[str]
         Statistics to compute per window. Supported: 'mean', 'std',
         'min', 'max'.
+    shift : int
+        Hours to shift the series before rolling, so each window ends this
+        many hours before the row it describes (set this to the forecast
+        horizon).
 
     Returns
     -------
@@ -77,7 +89,7 @@ def add_rolling_features(
     }
 
     for window in windows:
-        series = df[target_col].shift(1)  # avoid leakage
+        series = df[target_col].shift(shift)  # avoid leakage
         for stat in stats:
             if stat not in stat_fn_map:
                 logger.warning("Unknown rolling stat '%s' — skipping.", stat)
@@ -267,6 +279,12 @@ def build_features(
     in the same hour as the target and would leak it. Optionally drops rows
     with NaN (caused by initial lags).
 
+    Every target-derived feature for hour ``t`` uses only values from hour
+    ``t - horizon`` or earlier (``config['forecasting']['horizon']``, default
+    1), so each row is a direct ``horizon``-hours-ahead forecast. Features are
+    computed on a gap-free hourly index, so lags and windows are measured in
+    hours even when the input is missing some hours.
+
     Parameters
     ----------
     df : pd.DataFrame
@@ -284,16 +302,21 @@ def build_features(
     """
     target = config["data"]["target_col"]
     feat_cfg = config["features"]
+    horizon = config.get("forecasting", {}).get("horizon", 1)
 
-    logger.info("Starting feature engineering ...")
+    logger.info("Starting feature engineering (horizon=%dh) ...", horizon)
 
     same_hour_cols = [c for c in df.columns if c != target]
     if same_hour_cols:
         logger.info("Dropping same-hour input columns to avoid leakage: %s", same_hour_cols)
-    df = df[[target]].copy()
+    original_index = df.index
+    full_index = pd.date_range(original_index.min(), original_index.max(), freq="1h")
+    df = df[[target]].reindex(full_index)
 
-    df = add_lag_features(df, target, feat_cfg["lags"])
-    df = add_rolling_features(df, target, feat_cfg["rolling_windows"], feat_cfg["rolling_stats"])
+    df = add_lag_features(df, target, feat_cfg["lags"], min_lag=horizon)
+    df = add_rolling_features(
+        df, target, feat_cfg["rolling_windows"], feat_cfg["rolling_stats"], shift=horizon
+    )
     df = add_calendar_features(df, feat_cfg.get("calendar_features"))
     df = add_fourier_features(
         df,
@@ -301,6 +324,7 @@ def build_features(
         n_terms=feat_cfg["fourier_terms"],
     )
     df = add_interaction_features(df, target)
+    df = df.loc[original_index]
 
     if drop_na:
         before = len(df)

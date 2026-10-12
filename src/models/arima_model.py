@@ -1,4 +1,4 @@
-"""ARIMA baseline model for 24-hour-ahead forecasting.
+"""SARIMA baseline model for horizon-hours-ahead forecasting.
 
 Wraps ``statsmodels`` SARIMA with a consistent sklearn-style interface
 so it can be used interchangeably with the other models in the pipeline.
@@ -17,8 +17,9 @@ logger = logging.getLogger(__name__)
 class ARIMAForecaster:
     """Seasonal ARIMA wrapper for multi-step-ahead forecasting.
 
-    Fits a SARIMA model on the target time series and produces
-    24-step-ahead forecasts using rolling one-step predictions.
+    Fits a SARIMA model on the target time series. :meth:`predict_rolling`
+    produces a horizon-step-ahead forecast for every target hour from a
+    rolling forecast origin.
 
     Parameters
     ----------
@@ -90,6 +91,9 @@ class ARIMAForecaster:
             len(series),
         )
 
+        # Gap-free hourly index: missing hours become NaN, which the Kalman
+        # filter skips, so the seasonal period stays 24 *hours*.
+        series = series.asfreq("1h")
         self._train_series = series.copy()
 
         with warnings.catch_warnings():
@@ -134,6 +138,72 @@ class ARIMAForecaster:
 
         forecast = self._model_fit.forecast(steps=horizon)
         return np.array(forecast)
+
+    def predict_rolling(
+        self,
+        history: pd.Series,
+        target_index: pd.DatetimeIndex,
+        horizon: int,
+    ) -> np.ndarray:
+        """Forecast each target hour from ``horizon`` hours earlier.
+
+        For every timestamp ``t`` in ``target_index``, the forecast is the
+        ``horizon``-step-ahead prediction made at origin ``t - horizon``,
+        using observations up to that origin only. Parameters stay fixed from
+        :meth:`fit`; the state is updated with new observations through
+        ``extend`` (no refitting).
+
+        Parameters
+        ----------
+        history : pd.Series
+            Observed series after the training period (e.g. validation +
+            test), hourly with a DatetimeIndex. Gaps are allowed.
+        target_index : pd.DatetimeIndex
+            Timestamps to forecast, sorted ascending.
+        horizon : int
+            Forecast horizon in hours.
+
+        Returns
+        -------
+        np.ndarray
+            One forecast per timestamp in ``target_index``.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not been fitted yet.
+        ValueError
+            If the first origin falls inside the training period.
+        """
+        if self._model_fit is None or self._train_series is None:
+            raise RuntimeError("Model must be fitted before calling predict_rolling().")
+
+        step = pd.Timedelta(hours=1)
+        train_end = self._train_series.index.max()
+        first_origin = target_index.min() - horizon * step
+        last_origin = target_index.max() - horizon * step
+        if first_origin < train_end:
+            raise ValueError("First forecast origin must not be before the end of training.")
+
+        observed = history.reindex(pd.date_range(train_end + step, last_origin, freq="1h"))
+        by_origin: Dict[pd.Timestamp, float] = {}
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            results = self._model_fit
+            warmup = observed.loc[:first_origin]
+            if len(warmup):
+                results = results.extend(warmup)
+            origin = first_origin
+            while True:
+                by_origin[origin] = float(np.asarray(results.forecast(steps=horizon))[-1])
+                if origin >= last_origin:
+                    break
+                origin = origin + step
+                results = results.extend(observed.loc[[origin]])
+
+        logger.info("ARIMA rolling forecast done (%d origins).", len(by_origin))
+        return np.array([by_origin[t - horizon * step] for t in target_index])
 
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "ARIMAForecaster":

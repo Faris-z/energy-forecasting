@@ -20,12 +20,12 @@ data:
   test_ratio: 0.15
 
 forecasting:
-  horizon: 24
+  horizon: 24        # hours ahead; every feature for hour t uses data up to t - horizon
   freq: "1h"
 
 features:
-  lags: [1, 6, 12, 24, 48, 168]
-  rolling_windows: [6, 12, 24, 48, 168]
+  lags: [24, 48, 72, 96, 120, 144, 168]   # same hour on each of the previous 7 days; must be >= horizon
+  rolling_windows: [6, 12, 24, 48, 168]    # windows end at t - horizon
   rolling_stats: ["mean", "std", "min", "max"]
   fourier_periods: [24, 168]
   fourier_terms: 3

@@ -56,63 +56,104 @@ class _NullContext:
 
 def train_arima(
     train: pd.DataFrame,
-    test: pd.DataFrame,
+    history: pd.DataFrame,
+    test_index: pd.DatetimeIndex,
     config: Dict[str, Any],
 ) -> np.ndarray:
-    """Fit ARIMA on training series and forecast the test horizon.
+    """Fit ARIMA on the training series and forecast each test hour.
+
+    Each test hour ``t`` is forecast from origin ``t - horizon`` using
+    observations up to that origin (rolling origin, parameters fit once).
 
     Parameters
     ----------
     train : pd.DataFrame
         Training data with target column.
-    test : pd.DataFrame
-        Test data.
+    history : pd.DataFrame
+        Observations after the training period (validation + test).
+    test_index : pd.DatetimeIndex
+        Timestamps to forecast.
     config : Dict[str, Any]
         Project configuration.
 
     Returns
     -------
     np.ndarray
-        Forecast array of length len(test).
+        One forecast per timestamp in ``test_index``.
     """
     target = config["data"]["target_col"]
+    horizon = config["forecasting"]["horizon"]
     model = ARIMAForecaster.from_config(config)
     model.fit(train[target])
-    horizon = len(test)
-    preds = model.predict(horizon=horizon)
+    preds = model.predict_rolling(history[target], test_index, horizon)
     preds = np.clip(preds, 0, None)
-    logger.info("ARIMA forecast done (horizon=%d).", horizon)
+    logger.info("ARIMA forecast done (horizon=%dh).", horizon)
     return preds
 
 
 def train_prophet(
     train: pd.DataFrame,
-    test: pd.DataFrame,
+    test_index: pd.DatetimeIndex,
     config: Dict[str, Any],
 ) -> np.ndarray:
-    """Fit Prophet on training series and forecast the test horizon.
+    """Fit Prophet on the training series and forecast each test hour.
 
     Parameters
     ----------
     train : pd.DataFrame
         Training data with target column.
-    test : pd.DataFrame
-        Test data.
+    test_index : pd.DatetimeIndex
+        Timestamps to forecast.
     config : Dict[str, Any]
         Project configuration.
 
     Returns
     -------
     np.ndarray
-        Forecast array of length len(test).
+        One forecast per timestamp in ``test_index``.
     """
     target = config["data"]["target_col"]
     model = ProphetForecaster.from_config(config)
     model.fit(train[target])
-    preds = model.predict(horizon=len(test))
-    preds = np.clip(preds, 0, None)
+    preds = model.predict_at(test_index)
     logger.info("Prophet forecast done.")
     return preds
+
+
+def seasonal_naive(
+    series: pd.Series,
+    test_index: pd.DatetimeIndex,
+    horizon: int,
+    season: int = 24,
+) -> np.ndarray:
+    """Seasonal naive forecast: the value at the same hour on the latest known day.
+
+    Uses the smallest multiple of ``season`` hours that is at least
+    ``horizon``, so the value is known at forecast time.
+
+    Parameters
+    ----------
+    series : pd.Series
+        Full observed hourly series with a DatetimeIndex.
+    test_index : pd.DatetimeIndex
+        Timestamps to forecast.
+    horizon : int
+        Forecast horizon in hours.
+    season : int
+        Seasonal period in hours.
+
+    Returns
+    -------
+    np.ndarray
+        One forecast per timestamp in ``test_index``.
+    """
+    lag = season * int(np.ceil(horizon / season))
+    preds = series.shift(freq=pd.Timedelta(hours=lag)).reindex(test_index)
+    missing = int(preds.isna().sum())
+    if missing:
+        logger.warning("Seasonal naive: %d hours fall in data gaps; forward-filling.", missing)
+        preds = preds.ffill().bfill()
+    return preds.values
 
 
 def train_tree_model(
@@ -191,8 +232,11 @@ def train_lstm(
     """
     model = LSTMForecaster.from_config(config)
     model.fit(X_train, y_train, X_val, y_val)
-    preds = model.predict(X_test)
-    preds = preds[: len(X_test)]
+    # The last sequence_length validation rows give the first test rows a full
+    # input window, so every test hour gets a real prediction (no padding).
+    seq_len = model.sequence_length
+    context = np.vstack([X_val[-seq_len:], X_test])
+    preds = model.predict(context)[seq_len:]
     preds = np.clip(preds, 0, None)
     model.save(str(Path(config["paths"]["models_dir"]) / "lstm"))
     logger.info("LSTM predictions done.")
@@ -234,10 +278,20 @@ def run_training(config: Dict[str, Any]) -> None:
     train_raw, val_raw, test_raw = load_processed_data(config)
 
     # ── Feature engineering ───────────────────────────────────────────────────
+    # Built once on the full series, then split, so validation and test rows
+    # get their lags from the preceding (already observed) period instead of
+    # losing their first week. Every feature for hour t uses data up to
+    # t - horizon only.
     logger.info("Building features ...")
-    train_feat = build_features(train_raw, config, drop_na=True)
-    val_feat = build_features(val_raw, config, drop_na=True)
-    test_feat = build_features(test_raw, config, drop_na=True)
+    horizon = config["forecasting"]["horizon"]
+    full_raw = pd.concat([train_raw, val_raw, test_raw])
+    full_feat = build_features(full_raw, config, drop_na=True)
+    train_feat = full_feat[full_feat.index <= train_raw.index.max()]
+    val_feat = full_feat[
+        (full_feat.index >= val_raw.index.min()) & (full_feat.index <= val_raw.index.max())
+    ]
+    test_feat = full_feat[full_feat.index >= test_raw.index.min()]
+    test_index = test_feat.index
 
     feature_cols = get_feature_columns(train_feat, target)
     logger.info("Feature count: %d", len(feature_cols))
@@ -266,30 +320,33 @@ def run_training(config: Dict[str, Any]) -> None:
                     "train_size": len(train_feat),
                     "val_size": len(val_feat),
                     "test_size": len(test_feat),
-                    "horizon": config["forecasting"]["horizon"],
+                    "horizon": horizon,
                 }
             )
+
+        # ── Seasonal naive baseline (reported, not in the ensemble) ───────────
+        naive_preds = seasonal_naive(full_raw[target], test_index, horizon)
+        naive_metrics = compute_all_metrics(y_test, naive_preds)
+        all_results["seasonal_naive"] = naive_metrics
+        logger.info("Seasonal naive — %s", naive_metrics)
+        if mlflow_enabled:
+            mlflow.log_metrics({f"seasonal_naive_{k}": v for k, v in naive_metrics.items()})
 
         # ── ARIMA ─────────────────────────────────────────────────────────────
         logger.info("=" * 60)
         logger.info("Training ARIMA ...")
         t0 = time.time()
         try:
-            arima_preds = train_arima(train_raw, test_raw, config)
-            arima_preds = arima_preds[: len(y_test)]
+            arima_preds = train_arima(
+                train_raw, pd.concat([val_raw, test_raw]), test_index, config
+            )
             all_predictions["arima"] = arima_preds
-            arima_metrics = compute_all_metrics(y_test[: len(arima_preds)], arima_preds)
+            arima_metrics = compute_all_metrics(y_test, arima_preds)
             all_results["arima"] = arima_metrics
             logger.info("ARIMA — %s  (%.1fs)", arima_metrics, time.time() - t0)
             if mlflow_enabled:
                 mlflow.log_metrics({f"arima_{k}": v for k, v in arima_metrics.items()})
-            plot_residuals(
-                y_test[: len(arima_preds)],
-                arima_preds,
-                "ARIMA",
-                test_feat.index[: len(arima_preds)],
-                config,
-            )
+            plot_residuals(y_test, arima_preds, "ARIMA", test_index, config)
         except Exception as exc:
             logger.error("ARIMA failed: %s — using naive forecast.", exc)
             all_predictions["arima"] = np.full(len(y_test), y_train[-1])
@@ -300,21 +357,14 @@ def run_training(config: Dict[str, Any]) -> None:
         logger.info("Training Prophet ...")
         t0 = time.time()
         try:
-            prophet_preds = train_prophet(train_raw, test_raw, config)
-            prophet_preds = prophet_preds[: len(y_test)]
+            prophet_preds = train_prophet(train_raw, test_index, config)
             all_predictions["prophet"] = prophet_preds
-            prophet_metrics = compute_all_metrics(y_test[: len(prophet_preds)], prophet_preds)
+            prophet_metrics = compute_all_metrics(y_test, prophet_preds)
             all_results["prophet"] = prophet_metrics
             logger.info("Prophet — %s  (%.1fs)", prophet_metrics, time.time() - t0)
             if mlflow_enabled:
                 mlflow.log_metrics({f"prophet_{k}": v for k, v in prophet_metrics.items()})
-            plot_residuals(
-                y_test[: len(prophet_preds)],
-                prophet_preds,
-                "Prophet",
-                test_feat.index[: len(prophet_preds)],
-                config,
-            )
+            plot_residuals(y_test, prophet_preds, "Prophet", test_index, config)
         except Exception as exc:
             logger.error("Prophet failed: %s — using naive forecast.", exc)
             all_predictions["prophet"] = np.full(len(y_test), y_train[-1])
